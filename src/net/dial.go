@@ -466,6 +466,32 @@ func (d *Dialer) SetMultipathTCP(use bool) {
 // assumed.
 //
 // For Unix networks, the address must be a file system path.
+
+// Dial 连接到指定网络上的地址
+//
+// 已知网络有："tcp", "tcp4", "tcp6", "udp", "udp4", "udp6", "ip", "ip4"
+// "ip6", "unix", "unixgram", "unixpacket"。
+
+// 对于 tcp/udp 网络，地址格式为："host:port"。
+// host 必须是明确的 IP 地址或可以被解析为ip地址的host名称。
+// port 必须是明确的端口号或服务名。
+// 如果 host 是明确的 IPv6地址则必须使用[]来包括，如 "[2001:db8::1]:80" 或 "[fe80::1%zone]:80"。
+// 其中 zone 指明了定义在 RFC 4007 中明确的 IPv6 地址的范围。
+// [JoinHostPort] 和 [SplitHostPort] 可以按此形式操作 host 和 port 对。
+// 当使用 TCP 时，如果 host 被解析为多个 ip 地址，
+// Dial 将尝试每个 ip 直到任意一个成功。
+//
+// 示例：
+//
+//	Dial("tcp", "golang.org:http")
+//	Dial("tcp", "192.0.2.1:http")
+//	Dial("tcp", "198.51.100.1:80")
+//	Dial("udp", "[2001:db8::1]:domain")
+//	Dial("udp", "[fe80::1%lo0]:53")
+//	Dial("tcp", ":80")
+//
+// 对于 ip 网络，network 必须是 "ip", "ip4", "ip6" 后跟随 : 和明确的协议端口或协议名称，
+// 且 address 的格式为："host"。
 func Dial(network, address string) (Conn, error) {
 	var d Dialer
 	return d.Dial(network, address)

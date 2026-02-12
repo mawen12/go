@@ -26,6 +26,17 @@ import (
 // advanced arbitrarily far past the last token. Programs that need more
 // control over error handling or large tokens, or must run sequential scans
 // on a reader, should use [bufio.Reader] instead.
+
+// Scanner 提供一个便利接口用于读取类似一个包含以换行符分隔的文件行的文件。
+// 连续调用 [Scanner.Scan] 方法将遍历文件的"token"，跳过 token 之间的字节。
+// token 的规范由类型为 [SplitFunc] 的分割函数定义；默认分隔函数将输入分割成行，
+// 并去除换行符。[Scanner.Split] 函数在本软件包中定义，用于将文件扫描成行、字节、
+// UTF-8 编码的 runes 和空格分隔的单词。客户端也可以提供自定义拆分函数。
+
+// 扫描在遇到 EOF、第一个 I/O 错误或 token 太大无法放入 [Scanner.Buffer]
+// 时会不可恢复地停止。当扫描停止时，Reader 可能已经前进到远远超过最后一个标记的位置，
+// 需要更精细地控制错误处理或处理大型 token,或者必须在 Reader 上运行顺序扫描的程序，
+// 应该使用 [bufio.Reader]
 type Scanner struct {
 	r            io.Reader // The reader provided by the client.
 	split        SplitFunc // The function to split the tokens.
@@ -136,6 +147,14 @@ var ErrFinalToken = errors.New("final token")
 // Scan panics if the split function returns too many empty
 // tokens without advancing the input. This is a common error mode for
 // scanners.
+
+// Scan 会将 [Scanner] 推进到下一个 token，然后可以通过 [Scanner.Bytes]
+// 或 [Scanner.Text] 方法访问该 token。当没有更多 token 时，其将返回 false，
+// 无论是读到最后或出现错误。在 Scan 返回 false 后，[Scanner.Err]
+// 方法将返回 Scan 期间发生的任何错误。但如果是 [io.EOF]，否则 [Scanner.Err]
+// 将返回 nil。
+// 如果分割函数返回过多空 token 而未推进输入，Scan 将会崩溃。
+// 这是扫描程序常见的错误模式。
 func (s *Scanner) Scan() bool {
 	if s.done {
 		return false

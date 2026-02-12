@@ -32,6 +32,10 @@ var (
 // A new Reader is created by calling [NewReader] or [NewReaderSize];
 // alternatively the zero value of a Reader may be used after calling [Reset]
 // on it.
+
+// Reader 为 io.Reader 对象实现缓冲。
+// 通过调用 [NewReader]/[NewReaderSize] 来创建一个新的 Reader；
+// 或者也可以在调用 [Reset] 方法之后使用 Reader 的零值
 type Reader struct {
 	buf          []byte
 	rd           io.Reader // reader provided by the client
@@ -47,6 +51,9 @@ const maxConsecutiveEmptyReads = 100
 // NewReaderSize returns a new [Reader] whose buffer has at least the specified
 // size. If the argument io.Reader is already a [Reader] with large enough
 // size, it returns the underlying [Reader].
+
+// NewReaderSize 返回一个特定大小缓冲区的 Reader。如果参数 rd 的缓冲区足够大的，
+// 则返回其底层的 Reader
 func NewReaderSize(rd io.Reader, size int) *Reader {
 	// Is it already a Reader?
 	b, ok := rd.(*Reader)
@@ -59,11 +66,15 @@ func NewReaderSize(rd io.Reader, size int) *Reader {
 }
 
 // NewReader returns a new [Reader] whose buffer has the default size.
+
+// NewReader 返回一个缓冲区为默认大小（4kb）的 Reader
 func NewReader(rd io.Reader) *Reader {
 	return NewReaderSize(rd, defaultBufSize)
 }
 
 // Size returns the size of the underlying buffer in bytes.
+
+// Size 返回底层缓冲区的大小，以字节为单位
 func (b *Reader) Size() int { return len(b.buf) }
 
 // Reset discards any buffered data, resets all state, and switches

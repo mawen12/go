@@ -144,18 +144,33 @@ func (w wrappedError) Unwrap() error {
 //
 // A Cmd cannot be reused after calling its [Cmd.Run], [Cmd.Output] or [Cmd.CombinedOutput]
 // methods.
+
+// Cmd 代表正在准备或运行的外部命令
+//
+// 当调用 [Cmd.Run], [Cmd.Output] 或 [Cmd.CombinedOutput] 方法后，
+// Cmd 无法被复用
 type Cmd struct {
 	// Path is the path of the command to run.
 	//
 	// This is the only field that must be set to a non-zero
 	// value. If Path is relative, it is evaluated relative
 	// to Dir.
+
+	// Path 要运行命令的路径
+	//
+	// 这是唯一不允许值为空的字段。如果是相对路径，
+	// 则它是相对于目录进行评估的。
 	Path string
 
 	// Args holds command line arguments, including the command as Args[0].
 	// If the Args field is empty or nil, Run uses {Path}.
 	//
 	// In typical use, both Path and Args are set by calling Command.
+
+	// Args 保存了命令行的参数，其中将命令设置为 Args[0]。
+	// 如果参数字段为空，则使用 {Path} 运行。
+	//
+	// 通常情况下，Path 和 Args 都是通过调用 Command 函数设置的。
 	Args []string
 
 	// Env specifies the environment of the process.
@@ -168,6 +183,15 @@ type Cmd struct {
 	// missing and not explicitly set to the empty string.
 	//
 	// See also the Dir field, which may set PWD in the environment.
+
+	// Env 指定了进程的环境。
+	// 每一条记录都是 "key=value" 的格式。
+	// 如果 Env 为空，新的进程会使用当前进程的环境。
+	// 如果 Env 包含重复的 key，仅使用 slice 中最后一个值。
+	// 在 Window 系统中，SYSTEMROOT 是一个特例。
+	// 如果缺失且未显式设置为空字符串，则时钟会自动添加。
+	//
+	// 另请参阅 Dir 字段，该字段可能会环境中设置 PWD。
 	Env []string
 
 	// Dir specifies the working directory of the command.
@@ -187,6 +211,19 @@ type Cmd struct {
 	// get_current_dir_name, and the value of PWD is an alias for
 	// the current directory, those functions will return the
 	// value of PWD, which matches the value of Dir.
+
+	// Dir 指定了命名的工作目录。
+	// 如果 Dir 为空字符串，Run 将在进程的当前目录运行命令
+	//
+	// 在 Unix 系统上，如果未另行指定，Dir 的值还会决定子进程的
+	// PWD 环境变量。Unix 进程不使用名称来表示其工作目录，
+	// 而是使用对文件树中某个节点的隐式引用。因此，如果子进程通过调用
+	// 诸如 C 语言的 getpwd 之类的函数来获取其工作目录（该函数通过
+	// 遍历文件树来计算规范名称），那么如果 Dir 的原始值是涉及符号连接
+	// 的别名，则它将无法恢复该原始值。但是，如果子进程调用 Go 的
+	// [os.Getwd] 或者 GUN C 的 get_current_dir_name 函数，
+	// 并且 PWD 的值是当前目录的别名，则这些函数将返回 PWD 的值，
+	// 该值与 Dir 的值匹配。
 	Dir string
 
 	// Stdin specifies the process's standard input.
@@ -202,6 +239,18 @@ type Cmd struct {
 	// stops copying, either because it has reached the end of Stdin
 	// (EOF or a read error), or because writing to the pipe returned an error,
 	// or because a nonzero WaitDelay was set and expired.
+
+	// Stdin 指定进程的标准输入。
+	//
+	// 如果 Stdin 为空，进程将从空设备 (os.DevNull) 读取。
+	//
+	// 如果 Stdin 是一个 *os.File，进程的标准输出将直接链接到该文件。
+	//
+	// 否则，在命令执行期间，将使用一个单独的 goroutine 从 Stdin 读取
+	// 数据然后通过管道将数据传递给命令。在这种情况下，Wait 不会完成，
+	// 直到 goroutine 停止拷贝，原因可能是它已达到 Stdin 的末尾
+	// （EOF 或 读取错误），或者写入管道返回错误，或者设置了非零的
+	// WaitDelay 过期。
 	Stdin io.Reader
 
 	// Stdout and Stderr specify the process's standard output and error.
@@ -220,6 +269,19 @@ type Cmd struct {
 	//
 	// If Stdout and Stderr are the same writer, and have a type that can
 	// be compared with ==, at most one goroutine at a time will call Write.
+
+	// Stdout 和 Stderr 指定了进程的标准输出和错误。
+	//
+	// 如果其中任何一个为空，则 Run 会将相应的文件描述符链接到空设备（os.DevNull）。
+	//
+	// 如果其中任何一个为 *os.File，则该进程的相应输出直接链接到该文件。
+	//
+	// 在命令执行期间，将使用一个单独的 goroutine 通过管道从命令读取数据，
+	// 然后分发给相应的 Writer。在这种情况下，Wait 不会完成，直到
+	// goroutine 达到 EOF，或者设置了非零的 WaitDelay 过期。
+	// 
+	// 如果 Stdout 和 Stderr 是同一个 Writer，并且具有可以用 == 进行比较的类型，
+	// 则一次最多只有一个 goroutine 会调用 Write。
 	Stdout io.Writer
 	Stderr io.Writer
 

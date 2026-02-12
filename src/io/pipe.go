@@ -36,6 +36,8 @@ func (a *onceError) Load() error {
 var ErrClosedPipe = errors.New("io: read/write on closed pipe")
 
 // A pipe is the shared pipe structure underlying PipeReader and PipeWriter.
+
+// pipe 是 PipeReader 和 PipeWriter 底层共享的管道
 type pipe struct {
 	wrMu sync.Mutex // Serializes Write operations
 	wrCh chan []byte
@@ -192,6 +194,17 @@ func (w *PipeWriter) CloseWithError(err error) error {
 // It is safe to call Read and Write in parallel with each other or with Close.
 // Parallel calls to Read and parallel calls to Write are also safe:
 // the individual calls will be gated sequentially.
+
+// Pipe 创建一个内存同步的管道。
+// 它可以用于连接期望 [io.Reader] 和 [io.Writer] 的代码。
+//
+// 管道上的读取和写入操作是一对一匹配的，除非需要多次读取来消耗一次写入操作。
+// 也就是说，每次对 [PipeWriter] 的写入操作都会阻塞，直到满足 [PipeReader]
+// 的一次或多次读取操作，从而完全消耗掉写入的操作。
+// 数据直接从写入操作复制到相应的读取操作；没有内部缓冲。
+//
+// 可以安全地并行调用 Read/Write 方法，也可以与 Close 方法并行调用。
+// 并行调用 Read 和并行调用 Write 也是安全的；各个调用也会按顺序执行。
 func Pipe() (*PipeReader, *PipeWriter) {
 	pw := &PipeWriter{r: PipeReader{pipe: pipe{
 		wrCh: make(chan []byte),

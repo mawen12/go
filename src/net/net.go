@@ -121,27 +121,50 @@ type Addr interface {
 // Conn is a generic stream-oriented network connection.
 //
 // Multiple goroutines may invoke methods on a Conn simultaneously.
+
+// Conn 是代表了通用的面向流的网络连接。
+//
+// 多个 goroutines 可以同时调用 Conn 上的方法，代表其并发安全。
+// 
+// Conn 具有多种实现，如：[TCPConn],[UDPConn],[IPConn],[UnixConn]
 type Conn interface {
 	// Read reads data from the connection.
 	// Read can be made to time out and return an error after a fixed
 	// time limit; see SetDeadline and SetReadDeadline.
+
+	// Read 从连接中读取数据
+	// Read 可以通过 SetDeadline 和 SetReadDeadline 来设置超时时间，
+	// 当到达固定的时间限制后返回错误
 	Read(b []byte) (n int, err error)
 
 	// Write writes data to the connection.
 	// Write can be made to time out and return an error after a fixed
 	// time limit; see SetDeadline and SetWriteDeadline.
+
+	// Write 向连接写入数据
+	// Write 可以通过 SetDeadline 和 SetWriteDeadline 来设置超时时间，
+	// 当到达固定的时间限制后返回错误
 	Write(b []byte) (n int, err error)
 
 	// Close closes the connection.
 	// Any blocked Read or Write operations will be unblocked and return errors.
 	// Close may or may not block until any buffered data is sent;
 	// for TCP connections see [*TCPConn.SetLinger].
+
+	// Close 关闭连接
+	// 任何阻塞中的 Read/Write 操作将被解除阻塞，并返回错误。
+	// Close 可能或不会阻塞，直到发送完所有缓冲的数据。
+	// 对于 TCP 连接，请查阅 [*TCPConn.SetLinger]。
 	Close() error
 
 	// LocalAddr returns the local network address, if known.
+
+	// LocalAddr 返回已知的本地网络地址
 	LocalAddr() Addr
 
 	// RemoteAddr returns the remote network address, if known.
+
+	// RemoteAddr 返回已知的远程网络地址
 	RemoteAddr() Addr
 
 	// SetDeadline sets the read and write deadlines associated
@@ -165,6 +188,15 @@ type Conn interface {
 	// the deadline after successful Read or Write calls.
 	//
 	// A zero value for t means I/O operations will not time out.
+
+	// SetDeadline 设置该连接的 Read/Write 的截至时间。
+	// 其与 SetReadDeadline/SetWriteDeadline 等效
+	// 
+	// deadline 是一个绝对时间，超过该时间后，I/O 操作将失败而非阻塞。
+	// 该截至时间适用于所有未来和发送中的 I/O，而不仅仅是紧随其后的 Read/Write。
+	// 如果超过了截至时间，可以通过在未来设置一个截至日期来刷新连接。
+	//
+	//  
 	SetDeadline(t time.Time) error
 
 	// SetReadDeadline sets the deadline for future Read calls
@@ -409,15 +441,26 @@ func listenerBacklog() int {
 // A Listener is a generic network listener for stream-oriented protocols.
 //
 // Multiple goroutines may invoke methods on a Listener simultaneously.
+
+// Listener 是一个用于面向流协议的通用网络监听器
+// 
+// 多个 goroutines 可以同时调用 Listener 上的方法，代表其并发安全。
 type Listener interface {
 	// Accept waits for and returns the next connection to the listener.
+
+	// Accept 等待并返回下一个与该监听器的连接
 	Accept() (Conn, error)
 
 	// Close closes the listener.
 	// Any blocked Accept operations will be unblocked and return errors.
+	
+	// Close 关闭监听器。
+	// 任何被阻塞的 Accept 操作将变为非阻塞，并返回错误
 	Close() error
 
 	// Addr returns the listener's network address.
+
+	// Addr 返回监听器的网络地址
 	Addr() Addr
 }
 
