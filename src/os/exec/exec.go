@@ -279,7 +279,7 @@ type Cmd struct {
 	// 在命令执行期间，将使用一个单独的 goroutine 通过管道从命令读取数据，
 	// 然后分发给相应的 Writer。在这种情况下，Wait 不会完成，直到
 	// goroutine 达到 EOF，或者设置了非零的 WaitDelay 过期。
-	// 
+	//
 	// 如果 Stdout 和 Stderr 是同一个 Writer，并且具有可以用 == 进行比较的类型，
 	// 则一次最多只有一个 goroutine 会调用 Write。
 	Stdout io.Writer
@@ -457,6 +457,23 @@ var execerrdot = godebug.New("execerrdot")
 // unquoting algorithm. In these or other similar cases, you can do the
 // quoting yourself and provide the full command line in SysProcAttr.CmdLine,
 // leaving Args empty.
+
+// Command 返回 [Cmd] 结构来执行指定参数的给定程序。
+//
+// 在返回结构中，仅设置 Path 和 Args 字段。
+//
+// 如果 name 没有包含路径分隔符，Command 将尝试使用 [LookPath] 来
+// 将 name 映射到完整的路径。否则会直接使用 name 作为 path。
+//
+// 返回的 Cmd 的 Args 字段被构造为 name 后面跟着的 arg。因此 arg 参数
+// 中不应该包含命令本身。例如: Command("echo", "hello")，Arg[0] 总是
+// name，而不是可能被解析的路径。
+//
+// 在 Windows 上，进程以单个字符串形式接收整个命令行，然后自行解析。
+// Command 与使用 CommandLineToArgvW 的应用程序兼容的算法，将参数
+// 合并并引用到命令行字符串中。值得注意的是，msiexec.exe 和 cmd.exe
+// 是例外，它们的取消引用算法不同。在这些或其他类似情况下，您可以自行添加
+// 引用，并在 SysPropcAttr.CmdLine 中提供完整的命令行并将 Args 留空。
 func Command(name string, arg ...string) *Cmd {
 	cmd := &Cmd{
 		Path: name,
@@ -537,6 +554,15 @@ func Command(name string, arg ...string) *Cmd {
 // CommandContext sets the command's Cancel function to invoke the Kill method
 // on its Process, and leaves its WaitDelay unset. The caller may change the
 // cancellation behavior by modifying those fields before starting the command.
+
+// CommandContext 是带有上下文的 [Command]。
+//
+// 如果 context 先于命令完成，则所提供的上下文可被用来打断进程
+// （通过调用 cmd.Cancel/[os.Process.Kill])。
+// 
+// CommandContext 设置 [Command.Cancel] 函数来调用进程上的 
+// Kill 方法，然后将 WaitDelay 置为未设置。调用者可以在命令启动
+// 后通过编辑 Cancel 字段来自定义取消行为。
 func CommandContext(ctx context.Context, name string, arg ...string) *Cmd {
 	if ctx == nil {
 		panic("nil Context")
@@ -553,6 +579,10 @@ func CommandContext(ctx context.Context, name string, arg ...string) *Cmd {
 // It is intended only for debugging.
 // In particular, it is not suitable for use as input to a shell.
 // The output of String may vary across Go releases.
+
+// String 返回人类可读的 Cmd 的描述
+// 它仅用于调试。实际上，它不适合作为 shell 的输入。
+// String 的输出结果可能因 Go 发行版而有所不同。
 func (c *Cmd) String() string {
 	if c.Err != nil || c.lookPathErr != nil {
 		// failed to resolve path; report the original requested path (plus args)
@@ -633,6 +663,10 @@ func (c *Cmd) childStderr(childStdout *os.File) (*os.File, error) {
 // can write to send data to w.
 //
 // If w is nil, writerDescriptor returns a File that writes to os.DevNull.
+
+// writerDescriptor 返回一个 os.File，子进程可以向其中写入数据以将数据发送到 w。
+//
+// 如果 w 为空，writerDescriptor 返回一个写入 os.DevNull 的 File。 
 func (c *Cmd) writerDescriptor(w io.Writer) (*os.File, error) {
 	if w == nil {
 		f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
@@ -681,6 +715,18 @@ func closeDescriptors(closers []io.Closer) {
 // with [runtime.LockOSThread] and modified any inheritable OS-level
 // thread state (for example, Linux or Plan 9 name spaces), the new
 // process will inherit the caller's thread state.
+
+// Run 启动指定的命令并等待其完成。
+//
+// 如果命令运行成功，且在拷贝 stdin、stdout 和 stderr 过程中没有出现问题，
+// 并且以0退出状态退出，则返回的错误值为 nil。
+//
+// 如果命令启动但未能成功完成，则错误类型为 [*ExitError]。
+// 在其他情况下可能会返回其他错误类型。
+//
+// 如果调用的 goroutine 使用 [runtime.LockOSThread] 锁定了操作系统线程
+// 并修改了任何可继承的 OS 级线程状态（例如，Linux 或 Plan 9 名称空间），
+// 则新进程将继承调用者的线程状态。
 func (c *Cmd) Run() error {
 	if err := c.Start(); err != nil {
 		return err
@@ -694,6 +740,12 @@ func (c *Cmd) Run() error {
 //
 // After a successful call to Start the [Cmd.Wait] method must be called in
 // order to release associated system resources.
+
+// Start 启动指定的命令，但不等待其完成。
+// 
+// 如果 Start 成功返回，c.Process 字段将被设置。
+//
+// 在成功调用 Start 之后，必须调用 [Cmd.Wait] 方法以释放相关资源。
 func (c *Cmd) Start() error {
 	// Check for doubled Start calls before we defer failure cleanup. If the prior
 	// call to Start succeeded, we don't want to spuriously close its pipes.
@@ -847,6 +899,14 @@ func (c *Cmd) Start() error {
 //
 // watchCtx manipulates c.goroutineErr, so its result must be received before
 // c.awaitGoroutines is called.
+
+// watchCtx 监视 c.ctx，直到它能够将结果发送到 resultc。
+//
+// 如果 c.ctx 在发送结果之前完成，watchCtx 将调用 c.Cancel，
+// 并且在 c.WaitDelay 过后终止 cmd.Process。
+//
+// watchCtx 操作 c.goroutineErr，因此必须在调用 c.awaitGoroutines 之前
+// 接收其结果。
 func (c *Cmd) watchCtx(resultc chan<- ctxResult) {
 	select {
 	case resultc <- ctxResult{}:
@@ -973,6 +1033,21 @@ func (e *ExitError) Error() string {
 // for the respective I/O loop copying to or from the process to complete.
 //
 // Wait releases any resources associated with the [Cmd].
+
+// Wait 等待命令退出，并等待任何对 stdin 的复制或从 stdout 或 stderr 的复制完成。
+//
+// 该命令必须已由 [Cmd.Start] 启动。
+//
+// 如果命令运行成功，且在拷贝 stdin、stdout 和 stderr 过程中没有出现问题，
+// 并且以0退出状态退出，则返回的错误值为 nil。
+//
+// 如果命令未能运行或未能成功完成，则错误类型为 [*ExitError]。
+// 在 I/O 问题上可能会返回其他错误类型。
+//
+// 如果 c.Stdin、c.Stdout 或 c.Stderr 不是 [*os.File]，
+// Wait 还会等待与进程进行数据复制的相应 I/O 循环完成。
+//
+// Wait 会释放与 [Cmd] 相关的任何资源。
 func (c *Cmd) Wait() error {
 	if c.Process == nil {
 		return errors.New("exec: not started")
@@ -1065,6 +1140,10 @@ func (c *Cmd) awaitGoroutines(timer *time.Timer) error {
 // If c.Stderr was nil and the returned error is of type
 // [*ExitError], Output populates the Stderr field of the
 // returned error.
+
+// Output 执行命令并返回其 stdout。任何返回的错误将通常是 [*ExitError] 类型。
+// 如果 c.Stderr 为空且返回的错误是 [*ExitError] 类型，Output 会填充
+// 返回错误的 Stderr 字段。
 func (c *Cmd) Output() ([]byte, error) {
 	if c.Stdout != nil {
 		return nil, errors.New("exec: Stdout already set")
@@ -1088,6 +1167,8 @@ func (c *Cmd) Output() ([]byte, error) {
 
 // CombinedOutput runs the command and returns its combined standard
 // output and standard error.
+
+// CombineOutput 执行命令并返回其标准输出和标准错误的组合。
 func (c *Cmd) CombinedOutput() ([]byte, error) {
 	if c.Stdout != nil {
 		return nil, errors.New("exec: Stdout already set")
@@ -1108,6 +1189,11 @@ func (c *Cmd) CombinedOutput() ([]byte, error) {
 // A caller need only call Close to force the pipe to close sooner.
 // For example, if the command being run will not exit until standard input
 // is closed, the caller must close the pipe.
+
+// StdinPipe 返回一个管道，该管道将被链接到命令启动时的 stdin。
+// 在 [Cmd.Wait] 看到命令退出后，管道将被自动关闭。
+// 调用者只需调用 Close 来强制管道更早关闭。
+// 例如，如果正在运行的命令在标准输入关闭之前不会退出，则调用者必须关闭该管道。
 func (c *Cmd) StdinPipe() (io.WriteCloser, error) {
 	if c.Stdin != nil {
 		return nil, errors.New("exec: Stdin already set")
@@ -1133,6 +1219,13 @@ func (c *Cmd) StdinPipe() (io.WriteCloser, error) {
 // before all reads from the pipe have completed.
 // For the same reason, it is incorrect to call [Cmd.Run] when using StdoutPipe.
 // See the example for idiomatic usage.
+
+// StdoutPipe 返回一个管道，该管道将被链接到命令启动是的 stdout。
+// 
+// [Cmd.Wait] 将会在看到命令退出后关闭管道，因此大多数调用者不需要自己关闭管道。
+// 因此，在从管道完成所有读取之前调用 Wait 是不正确的。
+// 出于同样的原因，在使用 StdoutPipe 时调用 [Cmd.Run] 也是不正确的。
+// 请参阅示例以了解惯用法。
 func (c *Cmd) StdoutPipe() (io.ReadCloser, error) {
 	if c.Stdout != nil {
 		return nil, errors.New("exec: Stdout already set")
@@ -1158,6 +1251,13 @@ func (c *Cmd) StdoutPipe() (io.ReadCloser, error) {
 // before all reads from the pipe have completed.
 // For the same reason, it is incorrect to use [Cmd.Run] when using StderrPipe.
 // See the StdoutPipe example for idiomatic usage.
+
+// StderrPipe 返回一个管道，该管道将被链接到命令启动时的 stderr。
+//
+// [Cmd.Wait] 将会在看到命令退出后关闭管道，因此大多数调用者不需要自己关闭管道。
+// 因此，在从管道完成所有读取之前调用 Wait 是不正确的。
+// 出于同样的原因，在使用 StderrPipe 时调用 [Cmd.Run] 也是不正确的。
+// 请参阅 StdoutPipe 示例以了解惯用法。
 func (c *Cmd) StderrPipe() (io.ReadCloser, error) {
 	if c.Stderr != nil {
 		return nil, errors.New("exec: Stderr already set")

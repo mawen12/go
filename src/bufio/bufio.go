@@ -416,6 +416,18 @@ func (b *Reader) ReadSlice(delim byte) (line []byte, err error) {
 // Calling [Reader.UnreadByte] after ReadLine will always unread the last byte read
 // (possibly a character belonging to the line end) even if that byte is not
 // part of the line returned by ReadLine.
+
+// ReadLine 是一个底层的行读取原语。大多数调用者应该使用 [Reader.ReadBytes]('\n')/
+// [Reader.ReadString]('\n') 或使用 [Scanner]。
+//
+// ReadLine 尝试返回一行内容，但不包含行尾字节。如果行太长而无法放入缓冲区，然后 isPrefix
+// 被设置为 true，并返回行的开头部分。该行的其余部分将在将来的调用中返回。isPrefix 被设置为
+// false 以指示这是该行的最后一个片段。返回的缓冲区仅在下一次调用 ReadLine 之前有效。
+// ReadLine 要么返回一个非 nil 的行，要么返回一个错误，二者不会同时返回。
+//
+// ReadLine 返回的文本不包括行结束符（"\r\n" 或 "\n"）。如果输入在没有最终行结束符的情况下结束，
+// 则不会给出任何指示或错误。即使该字节不是 ReadLine 返回的行的一部分，调用 [Reader.UnreadByte]
+// 在 ReadLine 之后也将始终取消读取最后一个读取的字节（可能是属于行结束符的字符）。
 func (b *Reader) ReadLine() (line []byte, isPrefix bool, err error) {
 	line, err = b.ReadSlice('\n')
 	if err == ErrBufferFull {
@@ -489,6 +501,12 @@ func (b *Reader) collectFragments(delim byte) (fullBuffers [][]byte, finalFragme
 // ReadBytes returns err != nil if and only if the returned data does not end in
 // delim.
 // For simple uses, a Scanner may be more convenient.
+
+// ReadBytes 读取直到输入中第一次出现 delim，返回一个包含数据的 slice。
+// 直到并包括分隔符。如果 ReadBytes 在找到分隔符之前遇到错误，
+// 它将返回在错误之前读取的数据和错误本身（通常是 io.EOF）。
+// 当且仅当返回的数据不以 delim 结尾时，ReadBytes 才返回 err != nil。
+// 对于简单的用法，使用 Scanner 可能更方便。
 func (b *Reader) ReadBytes(delim byte) ([]byte, error) {
 	full, frag, n, err := b.collectFragments(delim)
 	// Allocate new buffer to hold the full pieces and the fragment.
@@ -509,6 +527,12 @@ func (b *Reader) ReadBytes(delim byte) ([]byte, error) {
 // ReadString returns err != nil if and only if the returned data does not end in
 // delim.
 // For simple uses, a Scanner may be more convenient.
+
+// ReadString 读取直到输入中第一次出现 delim，返回一个包含数据的字符串，
+// 直到并包括分隔符。如果 ReadString 在找到分隔符之前遇到错误，
+// 它将返回在错误之前读取的数据和错误本身（通常是 io.EOF）。
+// 当且仅当返回的数据不以 delim 结尾时，ReadString 才返回 err != nil。
+// 对于简单的用法，使用 Scanner 可能更方便。
 func (b *Reader) ReadString(delim byte) (string, error) {
 	full, frag, n, err := b.collectFragments(delim)
 	// Allocate new buffer to hold the full pieces and the fragment.

@@ -83,6 +83,29 @@ var ErrNoProgress = errors.New("multiple Read calls return no data or error")
 // nothing happened; in particular it does not indicate EOF.
 //
 // Implementations must not retain p.
+
+// Reader 是一个接口，包装了基本的 Read 方法。
+//
+// Read 将最多 len(p) 字节读入 p 中。它返回读取的字节数（0 <= n <= len(p))
+// 和遇到的任何错误。即使 Read 返回 n < len(p)，它也可能使用 p 的全部作为调用
+// 期间的临时空间。如果一些数据可用但不是 len(p) 字节，Read 通常返回可用的数据
+// 而不是等待更多。
+//
+// 当 Read 在成功读取 n > 0 字节后遇到错误或文件结尾条时，它返回读取的字节数。
+// 它可能返回同一次调用的（非 nil）错误，也可能在随后的调用中返回错误（和 n == 0）。
+// 一个常见的情况是，在输入流末尾返回非零字节数的 Reader 可能返回 err == EOF 或
+// err == nil。下一次 Read 应该返回 0, EOF。
+//
+// 调用者应该始终处理返回的 n > 0 字节，然后再考虑错误 err。这样做可以正确处理在读取
+// 一些字节后发生的 I/O 错误以及两种允许的 EOF 行为。
+//
+// 如果 len(p) == 0，Read 应该始终返回 n == 0。如果已知某些错误条件（如 EOF），
+// 它可能返回一个非 nil 错误。
+//
+// 实现 Read 的方法不鼓励返回零字节数和 nil 错误，除非 len(p) == 0。调用者应该将
+// 返回 0 和 nil。视为没有发生任何事情；特别是它不表示 EOF。
+//
+// 实现必须不保留 p。
 type Reader interface {
 	Read(p []byte) (n int, err error)
 }
@@ -96,6 +119,15 @@ type Reader interface {
 // Write must not modify the slice data, even temporarily.
 //
 // Implementations must not retain p.
+
+// Writer 是一个接口，包装了基本的 Writer 方法。
+//
+// Write 将 len(p) 字节从 p 写入到底层数据流中，它返回从 p 写入的字节数
+// (0 <= n <= len(p)) 和任何导致写入提前停止的错误。Write 必须在返回
+// n < len(p) 时返回一个非 nil 错误。
+// Write 必须不修改切片数据，即使是临时的。
+//
+// 实现必须不保留 p。
 type Writer interface {
 	Write(p []byte) (n int, err error)
 }
@@ -104,6 +136,10 @@ type Writer interface {
 //
 // The behavior of Close after the first call is undefined.
 // Specific implementations may document their own behavior.
+
+// Closer 是一个接口，包装了基本的 Close 方法。
+//
+// Close 第一次调用后的行为是未定义的。特定的实现可能会记录它们自己的行为。
 type Closer interface {
 	Close() error
 }
@@ -123,29 +159,39 @@ type Closer interface {
 // Seeking to any positive offset may be allowed, but if the new offset exceeds
 // the size of the underlying object the behavior of subsequent I/O operations
 // is implementation-dependent.
+
+// Seeker 是一个包装了基本 Seek 方法的接口。
 type Seeker interface {
 	Seek(offset int64, whence int) (int64, error)
 }
 
 // ReadWriter is the interface that groups the basic Read and Write methods.
+
+// ReadWriter 是一个包装了基本 Read 和 Write 方法的接口。
 type ReadWriter interface {
 	Reader
 	Writer
 }
 
 // ReadCloser is the interface that groups the basic Read and Close methods.
+
+// ReadCloser 是一个接口，组合了基本的 Read 和 Close 方法。
 type ReadCloser interface {
 	Reader
 	Closer
 }
 
 // WriteCloser is the interface that groups the basic Write and Close methods.
+
+// WriteCloser 是一个接口，组合了基本的 Write 和 Close 方法。
 type WriteCloser interface {
 	Writer
 	Closer
 }
 
 // ReadWriteCloser is the interface that groups the basic Read, Write and Close methods.
+
+// ReadWriteCloser 是一个接口，组合了基本的 Read、Write 和 Close 方法。
 type ReadWriteCloser interface {
 	Reader
 	Writer
