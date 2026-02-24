@@ -94,6 +94,78 @@ On Plan 9, the resolver always accesses /net/cs and /net/dns.
 On Windows, in Go 1.18.x and earlier, the resolver always used C
 library functions, such as GetAddrInfo and DnsQuery.
 */
+
+/**
+net 包提供一个用于网络I/O的可移植性接口，包含 TCP/IP，UDP，域名解析和 Unix 域套接字。
+
+虽然该包提供了访问底层网络原语的接口，但大多数客户端将只需要 [Dial]、[Listen] 和 Accept
+函数以及关联的 [Conn] 和 [Listener] 接口。crypto/tls 包使用相同的即可接口和相似 Dial
+和 Listen 函数。
+
+Dial 函数链接到服务器：
+
+	conn, err := net.Dial("tcp", "golang.org:80")
+	if err != nil {
+		// handle error
+	}
+	fmt.Fprintf(conn, "GET / HTTP/1.0\r\n\r\n")
+	status, err := bufio.NewReader(conn).ReadString('\n')
+	// ...
+
+Listen 函数创建服务器：
+
+	ln, err := net.Listen("tcp", ":8080")
+	if err != nil {
+		// handle error
+	}
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			// handle error
+		}
+		go hanldeConnection(conn)
+	}
+
+# 域名解析
+
+域名解析的方法，无论是间接的函数如 [Dial] 还是直接的函数如 [LookupHost] 和 [LookupAddr]，
+都因操作系统而异。
+
+在 Unix 系统上，解析器有两种选项来解析名称。它可以使用纯 Go 解析器直接向 /etc/resolv.conf
+中列出的服务器发送 DNS 请求，或者它可以使用基于 cgo 的解析器调用 C 库 routines，如 getaddrinfo
+和 getnameinfo。
+
+Unix 纯 Go 解析器优于 cgo 解析器，因为一个被阻塞的 DNS 请求只消耗一个 goroutine。而一个被阻塞的
+C 调用消耗一个操作系统线程。当 cgo 可用时，在各种条件下使用基于 cgo 的解析器：在不允许程序直接
+运行 DNS 请求的系统上、当 LOCALDOMAIN 环境变量存在时（即使为空）、当 RES_OPTIONS 或 HOSTALIASES
+环境变量非空时、当 ASR_CONFIG 环境变量非空时（仅 OpenBSD）、当 /etc/resolv.conf 或 /etc/nsswitch.conf
+指定使用 Go 解析器不实现的功能时。
+
+在所有系统上（除了 Plan 9）,当 cgo 解析器被使用时，该包应用一个并发 cgo 查找限制，以防止系统运行出
+系统线程。目前，它被限制为 500 个并发查找。
+
+解析器决策可以通过设置 GODEBUG 环境变量的 netdns 值（参见 package runtime）来覆盖 go/cgo，如：
+	export GODEBUG=netdns=go    # 强制纯 Go 解析器
+	export GODEBUG=netdns=cgo   # 强制本地解析器（cgo, win32）
+
+当构建 Go 源代码树时，也可以通过设置 netgo 或 netcgo 构建标签来强制执行特定的解析器。netgo 构建标签
+完全禁用 cgo 解析器，意味着 Go 解析器是唯一可用的。使用 netcgo 构建标签，纯 Go 解析器和 cgo 都被编译
+到二进制文件中，但 cgo 优于 go。使用 netcgo 时，可以通过 GODEBUG=netdns=go 在运行时强制使用 Go 解析器。
+
+netdns 设置的数字，如 GODEBUG=netdns=1，导致解析器打印有关其决策的调试信息。要在打印调试信息的同时强制
+使用特定的解析器，可以通过加号连接两个设置，如 GODEBUG=netdns=go+1。
+
+Go 解析器将使用 DNS 请求发送一个 EDNSO 附加头，以表示愿意接收更大的 DNS 包。这可能会导致一些调制解调器
+和路由器运行的 DNS 服务器出现偶尔的失败。设置 GODEBUG=netdns0=0 将禁用发送附加头。
+
+在 macOS 上，如果使用 -buildmode=c-archive 构建使用 net 包的 Go 代码，将生成的归档连接到 C 程序时需要
+传递 -lresolv 来链接 C 代码。
+
+在 Plan 9 上，解析器总是访问 /net/cs 和 /net/dns。
+
+在 Windows 上，在 Go 1.18.x 及更早的版本上，解析器总是使用 C 库函数，如 GetAddrInfo 和 DnsQuery。
+*/
+
 package net
 
 import (
@@ -113,9 +185,16 @@ import (
 // The two methods [Addr.Network] and [Addr.String] conventionally return strings
 // that can be passed as the arguments to [Dial], but the exact form
 // and meaning of the strings is up to the implementation.
+
+// Addr 代表一个网络端点地址。
+
+// Addr 的两个方法 [Addr.Network] 和 [Addr.String] 约定返回可以作为 [Dial] 参数的字符串，
+// 但字符串的确切形式和含义取决于实现。
 type Addr interface {
+	// Netword 返回网络的名称，如 tcp、udp
 	Network() string // name of the network (for example, "tcp", "udp")
-	String() string  // string form of address (for example, "192.0.2.1:25", "[2001:db8::1]:80")
+	// String 返回地址的字符串形式，如 192.0.2.1:25、[2001:db8::1]:80
+	String() string // string form of address (for example, "192.0.2.1:25", "[2001:db8::1]:80")
 }
 
 // Conn is a generic stream-oriented network connection.
@@ -125,7 +204,7 @@ type Addr interface {
 // Conn 是代表了通用的面向流的网络连接。
 //
 // 多个 goroutines 可以同时调用 Conn 上的方法，代表其并发安全。
-// 
+//
 // Conn 具有多种实现，如：[TCPConn],[UDPConn],[IPConn],[UnixConn]
 type Conn interface {
 	// Read reads data from the connection.
@@ -191,12 +270,12 @@ type Conn interface {
 
 	// SetDeadline 设置该连接的 Read/Write 的截至时间。
 	// 其与 SetReadDeadline/SetWriteDeadline 等效
-	// 
+	//
 	// deadline 是一个绝对时间，超过该时间后，I/O 操作将失败而非阻塞。
 	// 该截至时间适用于所有未来和发送中的 I/O，而不仅仅是紧随其后的 Read/Write。
 	// 如果超过了截至时间，可以通过在未来设置一个截至日期来刷新连接。
 	//
-	//  
+	//
 	SetDeadline(t time.Time) error
 
 	// SetReadDeadline sets the deadline for future Read calls
@@ -216,16 +295,21 @@ type conn struct {
 	fd *netFD
 }
 
+// ok 状态检查，判断连接是否有效
 func (c *conn) ok() bool { return c != nil && c.fd != nil }
 
 // Implementation of the Conn interface.
 
 // Read implements the Conn Read method.
+
+// Read 实现了 Conn 的 Read 方法
 func (c *conn) Read(b []byte) (int, error) {
 	if !c.ok() {
 		return 0, syscall.EINVAL
 	}
+	// 使用 netFD 的 Read 方法来读取数据
 	n, err := c.fd.Read(b)
+	// 如果发生错误，并且错误不是 io.EOF，则将错误包装成 OpError 类型
 	if err != nil && err != io.EOF {
 		err = &OpError{Op: "read", Net: c.fd.net, Source: c.fd.laddr, Addr: c.fd.raddr, Err: err}
 	}
@@ -233,11 +317,15 @@ func (c *conn) Read(b []byte) (int, error) {
 }
 
 // Write implements the Conn Write method.
+
+// Write 实现了 Conn 的 Write 方法
 func (c *conn) Write(b []byte) (int, error) {
 	if !c.ok() {
 		return 0, syscall.EINVAL
 	}
+	// 使用 netFD 的 Write 方法来写入数据
 	n, err := c.fd.Write(b)
+	// 如果发生错误，将错误包装成 OpError 类型
 	if err != nil {
 		err = &OpError{Op: "write", Net: c.fd.net, Source: c.fd.laddr, Addr: c.fd.raddr, Err: err}
 	}
@@ -245,11 +333,15 @@ func (c *conn) Write(b []byte) (int, error) {
 }
 
 // Close closes the connection.
+
+// Close 关闭连接
 func (c *conn) Close() error {
 	if !c.ok() {
 		return syscall.EINVAL
 	}
+	// 使用 netFD 的 Close 方法来关闭连接
 	err := c.fd.Close()
+	// 如果发生错误，将错误包装成 OpError 类型
 	if err != nil {
 		err = &OpError{Op: "close", Net: c.fd.net, Source: c.fd.laddr, Addr: c.fd.raddr, Err: err}
 	}
@@ -259,6 +351,9 @@ func (c *conn) Close() error {
 // LocalAddr returns the local network address.
 // The Addr returned is shared by all invocations of LocalAddr, so
 // do not modify it.
+
+// LocalAddr 返回本地网络地址。
+// 返回的地址由 LocalAddr 的所有调用共享，因此不要修改它。
 func (c *conn) LocalAddr() Addr {
 	if !c.ok() {
 		return nil
@@ -269,6 +364,9 @@ func (c *conn) LocalAddr() Addr {
 // RemoteAddr returns the remote network address.
 // The Addr returned is shared by all invocations of RemoteAddr, so
 // do not modify it.
+
+// RemoteAddr 返回远程网络地址。
+// 返回的地址由 RemoteAddr 的调用者共享，因此不要修改它。
 func (c *conn) RemoteAddr() Addr {
 	if !c.ok() {
 		return nil
@@ -443,7 +541,7 @@ func listenerBacklog() int {
 // Multiple goroutines may invoke methods on a Listener simultaneously.
 
 // Listener 是一个用于面向流协议的通用网络监听器
-// 
+//
 // 多个 goroutines 可以同时调用 Listener 上的方法，代表其并发安全。
 type Listener interface {
 	// Accept waits for and returns the next connection to the listener.
@@ -453,7 +551,7 @@ type Listener interface {
 
 	// Close closes the listener.
 	// Any blocked Accept operations will be unblocked and return errors.
-	
+
 	// Close 关闭监听器。
 	// 任何被阻塞的 Accept 操作将变为非阻塞，并返回错误
 	Close() error

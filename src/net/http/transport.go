@@ -7,6 +7,10 @@
 // This is the low-level Transport implementation of RoundTripper.
 // The high-level interface is in client.go.
 
+// HTTP 客户端实现，请参阅 RFC 7230 到 7235。
+//
+// 这是 RoundTripper 的低级 Transport 实现。高级接口在 client.go 中。
+
 package http
 
 import (

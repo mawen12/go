@@ -1,0 +1,89 @@
+{
+	"files": [
+		{
+			"path": "src/net/dial.go",
+			"bookmarks": [
+				{
+					"line": 494,
+					"column": 7,
+					"label": ""
+				},
+				{
+					"line": 550,
+					"column": 17,
+					"label": "Dial 实现"
+				},
+				{
+					"line": 921,
+					"column": 0,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "src/net/net.go",
+			"bookmarks": [
+				{
+					"line": 167,
+					"column": 21,
+					"label": ""
+				},
+				{
+					"line": 252,
+					"column": 7,
+					"label": "Conn 的通用实现"
+				},
+				{
+					"line": 485,
+					"column": 0,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "src/net/tcpsock.go",
+			"bookmarks": [
+				{
+					"line": 111,
+					"column": 8,
+					"label": "Conn 的 TCP 实现"
+				},
+				{
+					"line": 343,
+					"column": 16,
+					"label": "Listener 的 TCP 实现"
+				}
+			]
+		},
+		{
+			"path": "src/net/udpsock.go",
+			"bookmarks": [
+				{
+					"line": 118,
+					"column": 8,
+					"label": "Conn 的 UDP 实现"
+				}
+			]
+		},
+		{
+			"path": "src/net/iprawsock.go",
+			"bookmarks": [
+				{
+					"line": 95,
+					"column": 9,
+					"label": "Conn 的 IP 实现"
+				}
+			]
+		},
+		{
+			"path": "src/net/unixsock.go",
+			"bookmarks": [
+				{
+					"line": 67,
+					"column": 9,
+					"label": "Conn 的 Unix domain sockets 实现"
+				}
+			]
+		}
+	]
+}

@@ -110,9 +110,18 @@ var reqWriteExcludeHeader = map[string]bool{
 // The field semantics differ slightly between client and server
 // usage. In addition to the notes on the fields below, see the
 // documentation for [Request.Write] and [RoundTripper].
+
+// 一个 Request 代表一个 HTTP 请求，可以是被服务器接收，也可以是被
+// 客户端发送。
+//
+// 字段的语义在客户端和服务器使用之间略有不同，除了在下面的字段说明
+// 中提到的内容之外，还请参阅 [Request.Write] 和 [RoundTripper] 的文档。
 type Request struct {
 	// Method specifies the HTTP method (GET, POST, PUT, etc.).
 	// For client requests, an empty string means GET.
+
+	// Method 指定 HTTP 方法（GET、POST、PUT 等）。
+	// 对于客户端请求，空字符串表示 GET。
 	Method string
 
 	// URL specifies either the URI being requested (for server
@@ -127,6 +136,17 @@ type Request struct {
 	// connect to, while the Request's Host field optionally
 	// specifies the Host header value to send in the HTTP
 	// request.
+
+	// URL 指定了被请求的 URI （对服务器请求）或要访问的 URL
+	// （对客户端请求）。
+	//
+	// 对于服务端请求，URL 是从 Request-Line 中提供的 URI
+	// 解析而来的，并存储在 RequestURI 中。对于绝大部分请求，
+	// URL 中除了 Path 和 RawQuery 以外的字段都是空的。（参见 RFC 7230，第 5.3 节）
+	//
+	// 对于客户端请求，URL 的 Host 指定了要连接的服务器，
+	// 而 Request 的 Host 字段可选地指定了要在 HTTP 请求
+	// 中发送的 Host 头的值。
 	URL *url.URL
 
 	// The protocol version for incoming server requests.
@@ -134,6 +154,11 @@ type Request struct {
 	// For client requests, these fields are ignored. The HTTP
 	// client code always uses either HTTP/1.1 or HTTP/2.
 	// See the docs on Transport for details.
+
+	// 对于服务器请求，协议版本。
+	//
+	// 对于客户端请求，这些字段可被忽略。HTTP 客户端代码总是
+	// 使用 HTTP/1.1 或 HTTP/2。详情请参阅 Transport 的文档。
 	Proto      string // "HTTP/1.0"
 	ProtoMajor int    // 1
 	ProtoMinor int    // 0
@@ -169,6 +194,35 @@ type Request struct {
 	// and Connection are automatically written when needed and
 	// values in Header may be ignored. See the documentation
 	// for the Request.Write method.
+
+	// Header 包含了服务器接收或客户端发送的请求头字段。
+	//
+	// 如果服务器接收到一个请求，包含以下请求行：
+	//
+	// 	Host: example.com
+	// 	accept-encoding: gzip, deflate
+	// 	Accept-Language: en-us
+	// 	fOO: Bar
+	// 	foo: two
+	//
+	// then
+	//
+	//  Header = map[string][]string{
+	// 		"Accept-Encoding": {"gzip, deflate"},
+	//      "Accept-Language": {"en-us"},
+	//      "Foo": {"Bar", "two"},
+	//  }
+	//
+	// 对于传入的请求，Host 头被提升到 Request.Host 字段，
+	// 并从 Header map 中移除。
+	//
+	// HTTP 定义了头名称是不区分大小写的。请求解析器通过
+	// 使用 CanonicalHeaderKey 来实现这一点，是第一个字符
+	// 和任何连字符（-）后跟着的字符大写，其他字符小写。
+	//
+	// 对于客户端请求，某些头如 Content-Length 和 Connection
+	// 在需要时会自动写入，Header 中值可能会被忽略。查看
+	// Request.Write 方法的文档。
 	Header Header
 
 	// Body is the request's body.
@@ -185,6 +239,17 @@ type Request struct {
 	// Body must allow Read to be called concurrently with Close.
 	// In particular, calling Close should unblock a Read waiting
 	// for input.
+
+	// Body 是请求的主体。
+	//
+	// 对于客户端请求，一个 nil 的 body 意味着请求没有 body。
+	// 例如 GET 请求。HTTP 客户端的 Transport 负责调用 Close 方法。
+	//
+	// 对于服务端请求，请求体总是非 nil 的，但当没有 body 是会立即
+	// 返回 EOF。服务器会关闭请求体。ServeHTTP Handler 不需要。
+	//
+	// Bodu 必须允许 Read 与 Close 并发调用。特别是，调用 Close
+	// 应该解除一个等待输入的 Read。
 	Body io.ReadCloser
 
 	// GetBody defines an optional func to return a new copy of
@@ -193,6 +258,12 @@ type Request struct {
 	// requires setting Body.
 	//
 	// For server requests, it is unused.
+
+	// GetBody 定义一个可选的函数来返回一个新的 Body 副本。
+	// 当需要重定向时，客户端请求需要多次读取 body 时使用。
+	// 使用 GetBody 仍然需要设置 Body。
+	//
+	// 对于服务器请求，它未被使用。
 	GetBody func() (io.ReadCloser, error)
 
 	// ContentLength records the length of the associated content.
@@ -202,6 +273,12 @@ type Request struct {
 	//
 	// For client requests, a value of 0 with a non-nil Body is
 	// also treated as unknown.
+
+	// ContentLength 记录关联内容的长度，值 -1 表示长度位置。
+	// 值 >= 0 表示可以从 body 中读取指定数量的字节。
+	//
+	// 对于客户端请求，一个值为 0 且 Body 非 nil 的请求也被
+	// 视为长度未知。
 	ContentLength int64
 
 	// TransferEncoding lists the transfer encodings from outermost to
@@ -209,6 +286,10 @@ type Request struct {
 	// TransferEncoding can usually be ignored; chunked encoding is
 	// automatically added and removed as necessary when sending and
 	// receiving requests.
+
+	// TransferEncoding 列出了从最外层到最内层的传输编码。空列表表示
+	// "identity" 编码。TransferEncoding 可以通常被忽略，因为在发送
+	// 和接收请求时，chunked 编码会根据需要自动添加和删除。
 	TransferEncoding []string
 
 	// Close indicates whether to close the connection after
@@ -221,6 +302,14 @@ type Request struct {
 	// For client requests, setting this field prevents re-use of
 	// TCP connections between requests to the same hosts, as if
 	// Transport.DisableKeepAlives were set.
+
+	// Close 指示是否在回复此请求后（对于服务器）或
+	// 在发送该请求后然后读取其响应后（对于客户端）关闭连接。
+	//
+	// 对于服务端请求，HTTP 服务器会自动处理这个字段，Handler 不需要再去处理。
+	//
+	// 对于客户端请求，设置这个字段会阻止在对同一主机的请求之间重用
+	// TCP 连接，就像设置了 Transport.DisableKeepAlives 一样。
 	Close bool
 
 	// For server requests, Host specifies the host on which the
@@ -242,12 +331,30 @@ type Request struct {
 	// header to send. If empty, the Request.Write method uses
 	// the value of URL.Host. Host may contain an international
 	// domain name.
+
+	// 对于服务器请求，Host 指定了 URL 被请求的主机。对于 HTTP/1
+	// （根据 RFC 7230，第 5.4 节），这可以是 Host 头的值或 URL 本身
+	// 给出的主机名。对于 HTTP/2，它是 ":authority" 伪头字段的值。
+	// 它可能是 "host:port" 的形式。对于国际域名，Host 可以是 Punycode
+	// 或 Unicode 形式。使用 golang.org/x/net/idna 来转换成任一格式（如果需要）。
+	// 为了防止 DNS 反绑定攻击，服务器 Handler 应该验证 Host 头具有一个 Header
+	// 认为自己是权威的值。包含的 ServeMux 支持注册到特定主机名的模式，
+	// 因此保护其注册的 Handler。
+	//
+	// 对于客户端请求，Host 可选地覆盖要发送的 Host 头。
+	// 如果为空，Request.Write 方法使用 URL.Host 的值。
+	// Host 可以包含国际域名。
 	Host string
 
 	// Form contains the parsed form data, including both the URL
 	// field's query parameters and the PATCH, POST, or PUT form data.
 	// This field is only available after ParseForm is called.
 	// The HTTP client ignores Form and uses Body instead.
+
+	// Form 包含了解析后的表单数据，包含 URL 字段的查询参数和
+	// PATCH、POST 或 PUT 表单数据。
+	// 该字段仅在调用 ParseForm 后可用。
+	// HTTP 客户端忽略 Form 并使用 Body 代替。
 	Form url.Values
 
 	// PostForm contains the parsed form data from PATCH, POST
@@ -255,11 +362,21 @@ type Request struct {
 	//
 	// This field is only available after ParseForm is called.
 	// The HTTP client ignores PostForm and uses Body instead.
+
+	// PostForm 包含了从 PATCH、POST 或 PUT 的 body 参数解析后的
+	// 表单数据。
+	//
+	// 该字段仅在调用 ParseForm 后可用。
+	// HTTP 客户端忽略 PostForm 并使用 Body 代替。
 	PostForm url.Values
 
 	// MultipartForm is the parsed multipart form, including file uploads.
 	// This field is only available after ParseMultipartForm is called.
 	// The HTTP client ignores MultipartForm and uses Body instead.
+
+	// MultipartForm 是解析后的 multipart 表单，包含文件上传。
+	// 该字段仅在调用 ParseMultipartForm 后可用。
+	// HTTP 客户端忽略 MultipartForm 并使用 Body 代替。
 	MultipartForm *multipart.Form
 
 	// Trailer specifies additional headers that are sent after the request
@@ -280,6 +397,20 @@ type Request struct {
 	// not mutate Trailer.
 	//
 	// Few HTTP clients, servers, or proxies support HTTP trailers.
+
+	// Trailer 指定了在请求体后面发送的附加头。
+	//
+	// 对于服务器请求，Trailer map 初始化时仅包含 trailer 键，值为 nil。
+	// (客户端声明它将来会发送哪些 trailers）。当 Handler 从 Body 读取时，
+	// 不能引用 Trailer。当从 Body 读取返回 EOF 后，可以再次读取 Trailer，
+	// 如果客户端发送了 trailers，Trailer 将包含非 nil 的值。
+	//
+	// 对于客户端请求，Trailer 必须初始化为一个包含将来要发送的 trailer 键的 map。
+	// 值可以是 nil 或它们的最终值。ContentLength 必须是 0 或 -1,以发送一个 chunked
+	// 请求。在 HTTP 请求发送后，map 值可以在请求体被读取时更新，一旦 body 返回 EOF，
+	// 调用者必须不再修改 Trailer。
+	//
+	// 很少有 HTTP 客户端、服务器或代理支持 HTTP trailers。
 	Trailer Header
 
 	// RemoteAddr allows HTTP servers and other software to record
@@ -289,12 +420,21 @@ type Request struct {
 	// sets RemoteAddr to an "IP:port" address before invoking a
 	// handler.
 	// This field is ignored by the HTTP client.
+
+	// RemoteAddr 允许 HTTP 服务器和其他软件记录发送请求的网络地址，
+	// 通常用于日志记录。该字段不由 ReadRequest 填充，且没有定义的格式。
+	// HTTP 包中的服务器在调用 Handler 之前将 RemoteAddr 设置为一个 "IP:port" 地址。
+	// 该字段被 HTTP 客户端忽略。
 	RemoteAddr string
 
 	// RequestURI is the unmodified request-target of the
 	// Request-Line (RFC 7230, Section 3.1.1) as sent by the client
 	// to a server. Usually the URL field should be used instead.
 	// It is an error to set this field in an HTTP client request.
+
+	// RequestURI 是客户端发送给服务器的 Request-Line 中未经修改的
+	// request-target（RFC 7230，第 3.1.1 节）。通常应该使用 URL 字段。
+	// 在 HTTP 客户端请求中设置此字段是一个错误。
 	RequestURI string
 
 	// TLS allows HTTP servers and other software to record
@@ -304,6 +444,11 @@ type Request struct {
 	// TLS-enabled connections before invoking a handler;
 	// otherwise it leaves the field nil.
 	// This field is ignored by the HTTP client.
+
+	// TLS 允许 HTTP 服务器和其他软件记录有关接收请求的 TLS 连接的信息。
+	// 该字段不应由 ReadRequest 填充。HTTP 包中的服务器在启用 TLS 的连接
+	// 上设置该字段，在调用 Handler 之前；否则将该字段保持为 nil。
+	// 该字段被 HTTP 客户端忽略。
 	TLS *tls.ConnectionState
 
 	// Cancel is an optional channel whose closure indicates that the client
@@ -315,21 +460,38 @@ type Request struct {
 	// Deprecated: Set the Request's context with NewRequestWithContext
 	// instead. If a Request's Cancel field and context are both
 	// set, it is undefined whether Cancel is respected.
+
+	// Cancel 是一个可选的通道，其关闭表示客户端请求应被视为已取消。
+	// 并非所有 RoundTripper 的实现都支持 Cancel。
+	//
+	// 对于服务器请求，此字段不适用。
+	//
+	// 已废弃：请改用 NewRequestWithContext 来设置 Request 的上下文。
+	// 如果一个 Request 的 Cancel 字段和上下文都被设置了，那么是否尊重 Cancel 是未定义的。
 	Cancel <-chan struct{}
 
 	// Response is the redirect response which caused this request
 	// to be created. This field is only populated during client
 	// redirects.
+
+	// Response 是导致此请求被创建的重定向响应。
+	// 此字段仅在客户端重定向期间填充。
 	Response *Response
 
 	// Pattern is the [ServeMux] pattern that matched the request.
 	// It is empty if the request was not matched against a pattern.
+
+	// Pattern 是与请求匹配的 [ServeMux] 模式。如果请求没有与任何模式匹配，则为空。
 	Pattern string
 
 	// ctx is either the client or server context. It should only
 	// be modified via copying the whole Request using Clone or WithContext.
 	// It is unexported to prevent people from using Context wrong
 	// and mutating the contexts held by callers of the same request.
+
+	// ctx 是客户端或服务端上下文，它应该只能通过使用 Clone 或 WithContext
+	// 复制整个 Request 来修改。
+	// 它是未导出的，以防止人们错误地使用 Context 并修改同一请求的调用者持有的上下文。
 	ctx context.Context
 
 	// The following fields are for requests matched by ServeMux.
@@ -349,6 +511,15 @@ type Request struct {
 // For incoming server requests, the context is canceled when the
 // client's connection closes, the request is canceled (with HTTP/2),
 // or when the ServeHTTP method returns.
+
+// Context 返回请求的上下文。要更改上下文，请使用 [Request.Clone] 或 [Request.WithContext]。
+//
+// 返回的上下文始终非 nil；它默认为 Background 上下文。
+//
+// 对于外发的客户端请求，上下文控制取消。
+//
+// 对于入站的服务器请求，当客户端连接关闭，请求被取消（使用 HTTP/2），或 ServeHTTP 方法返回时，
+// 上下文被取消。
 func (r *Request) Context() context.Context {
 	if r.ctx != nil {
 		return r.ctx
@@ -365,6 +536,14 @@ func (r *Request) Context() context.Context {
 //
 // To create a new request with a context, use [NewRequestWithContext].
 // To make a deep copy of a request with a new context, use [Request.Clone].
+
+// WithContext 返回 r 的一个浅复制，其上下文更改为 ctx，提供的 ctx 必须非 nil。
+//
+// 对于外发的客户端请求，上下文控制请求及其响应的整个生命周期：获取连接、发送请求
+// 和读取响应头和主体。
+//
+// 为了创建一个带有上下文的新请求，请使用 [NewRequestWithContext]。
+// 要使用新上下文创建请求的深复制，请使用 [Request.Clone]。
 func (r *Request) WithContext(ctx context.Context) *Request {
 	if ctx == nil {
 		panic("nil context")
@@ -383,54 +562,80 @@ func (r *Request) WithContext(ctx context.Context) *Request {
 // For an outgoing client request, the context controls the entire
 // lifetime of a request and its response: obtaining a connection,
 // sending the request, and reading the response headers and body.
+
+// Clone 返回 r  的一个深拷贝，其上下文更改为 ctx，提供的 ctx 必须非 nil。
+//
+// Clone 只对 Body 字段进行浅复制。
+//
+// 对于外发的客户端请求，上下文控制请求及其响应的整个生命周期：获取连接、发送请求
+// 和读取响应头和主体。
 func (r *Request) Clone(ctx context.Context) *Request {
 	if ctx == nil {
 		panic("nil context")
 	}
 	r2 := new(Request)
 	*r2 = *r
+	// 使用新的 ctx
 	r2.ctx = ctx
+	// 拷贝 URL
 	r2.URL = cloneURL(r.URL)
+	// 拷贝 Header
 	r2.Header = r.Header.Clone()
+	// 拷贝 Trailer
 	r2.Trailer = r.Trailer.Clone()
+	// 拷贝 TransferEncoding
 	if s := r.TransferEncoding; s != nil {
 		s2 := make([]string, len(s))
 		copy(s2, s)
 		r2.TransferEncoding = s2
 	}
+	// 拷贝 Form
 	r2.Form = cloneURLValues(r.Form)
+	// 拷贝 PostForm
 	r2.PostForm = cloneURLValues(r.PostForm)
+	// 拷贝 MultipartForm
 	r2.MultipartForm = cloneMultipartForm(r.MultipartForm)
 
 	// Copy matches and otherValues. See issue 61410.
+	// 拷贝 matches
 	if s := r.matches; s != nil {
 		s2 := make([]string, len(s))
 		copy(s2, s)
 		r2.matches = s2
 	}
+	// 拷贝 otherValues
 	r2.otherValues = maps.Clone(r.otherValues)
 	return r2
 }
 
 // ProtoAtLeast reports whether the HTTP protocol used
 // in the request is at least major.minor.
+
+// ProtoAtLeast 报告请求中使用的 HTTP 协议是否至少为 major.minor。
 func (r *Request) ProtoAtLeast(major, minor int) bool {
 	return r.ProtoMajor > major ||
 		r.ProtoMajor == major && r.ProtoMinor >= minor
 }
 
 // UserAgent returns the client's User-Agent, if sent in the request.
+
+// UserAgent 返回客户端的 User-Agent，如果在请求中发送了的话。
 func (r *Request) UserAgent() string {
 	return r.Header.Get("User-Agent")
 }
 
 // Cookies parses and returns the HTTP cookies sent with the request.
+
+// Cookies 解析并返回随请求发送的 HTTP cookies。
 func (r *Request) Cookies() []*Cookie {
 	return readCookies(r.Header, "")
 }
 
 // CookiesNamed parses and returns the named HTTP cookies sent with the request
 // or an empty slice if none matched.
+
+// CookiesNamed 解析并返回随请求发送的指定名称的 HTTP cookies，
+// 如果没有匹配的 cookie，则返回一个空切片。
 func (r *Request) CookiesNamed(name string) []*Cookie {
 	if name == "" {
 		return []*Cookie{}
@@ -439,12 +644,17 @@ func (r *Request) CookiesNamed(name string) []*Cookie {
 }
 
 // ErrNoCookie is returned by Request's Cookie method when a cookie is not found.
+
+// ErrNoCookies 是当在 Request 的 Cookie 方法中未找到 cookie 时返回的错误。
 var ErrNoCookie = errors.New("http: named cookie not present")
 
 // Cookie returns the named cookie provided in the request or
 // [ErrNoCookie] if not found.
 // If multiple cookies match the given name, only one cookie will
 // be returned.
+
+// Cookie 返回请求中提供的指定名称的 cookie，如果未找到则返回 [ErrNoCookie]。
+// 如果多个 cookie 匹配给定的名称，则只返回一个 cookie。
 func (r *Request) Cookie(name string) (*Cookie, error) {
 	if name == "" {
 		return nil, ErrNoCookie
@@ -461,6 +671,10 @@ func (r *Request) Cookie(name string) (*Cookie, error) {
 // separated by semicolon.
 // AddCookie only sanitizes c's name and value, and does not sanitize
 // a Cookie header already present in the request.
+
+// AddCookie 向请求添加一个 cookie。根据 RFC 6265 第 5.4 节，AddCookie 不会附加多个 [Cookie] 头字段。
+// 这意味着所有 cookie（如果有的话）都写在同一行，用分号分隔。
+// AddCookie 只会清理 c 的 name 和 value，并不会清理请求中已经存在的 Cookie 头。
 func (r *Request) AddCookie(c *Cookie) {
 	s := fmt.Sprintf("%s=%s", sanitizeCookieName(c.Name), sanitizeCookieValue(c.Value, c.Quoted))
 	if c := r.Header.Get("Cookie"); c != "" {
@@ -478,6 +692,13 @@ func (r *Request) AddCookie(c *Cookie) {
 // as a method is that the compiler can diagnose programs that use the
 // alternate (correct English) spelling req.Referrer() but cannot
 // diagnose programs that use Header["Referrer"].
+
+// Referer 返回引用 URL，如果在请求中发送了的话。
+//
+// Referer 的拼写错误与请求本身中的拼写错误一样，是 HTTP 最早期的一个错误。
+// 这个值也可以从 [Header] map 中获取，如 Header["Referer"];
+// 将其作为方法提供的好处是编译器可以诊断使用了替代（正确英语）
+// 拼写 req.Referrer() 的程序，但无法诊断使用 Header["Referrer"] 的程序。
 func (r *Request) Referer() string {
 	return r.Header.Get("Referer")
 }
@@ -558,6 +779,20 @@ const defaultUserAgent = "Go-http-client/1.1"
 // If Body is present, Content-Length is <= 0 and [Request.TransferEncoding]
 // hasn't been set to "identity", Write adds "Transfer-Encoding:
 // chunked" to the header. Body is closed after it is sent.
+
+// Write 写入一个 HTTP/1.1 请求，以线格式写入请求头和请求体。
+// 此方法会检查请求的以下字段：
+//
+//	Host
+//	URL
+//	Method（默认为 "GET"）
+//	Header
+//	ContentLength
+//	TransferEncoding
+//	Body
+//
+// 如果 Body 存在，Content-Length <= 0 且 [Request.TransferEncoding] 没有设置为 "identity"，
+// Write 会在头中添加 "Transfer-Encoding: chunked"。发送后关闭 Body。
 func (r *Request) Write(w io.Writer) error {
 	return r.write(w, false, nil, nil)
 }
@@ -568,6 +803,11 @@ func (r *Request) Write(w io.Writer) error {
 // section 5.3 of RFC 7230, including the scheme and host.
 // In either case, WriteProxy also writes a Host header, using
 // either r.Host or r.URL.Host.
+
+// WriteProxy 类似于 [Request.Write]，但以 HTTP 代理期望的格式写入请求。
+// 特别是，[Request.WriteProxy] 根据 RFC 7230 第 5.3 节以绝对 URI
+// 的形式写入请求的初始 Request-URI 行，包括 scheme 和 host。
+// 在任何情况下，WriteProxy 还会写入 Host 头，使用 r.Host 或 r.URL.Host。
 func (r *Request) WriteProxy(w io.Writer) error {
 	return r.write(w, true, nil, nil)
 }
@@ -886,29 +1126,51 @@ func NewRequest(method, url string, body io.Reader) (*Request, error) {
 // exact value (instead of -1), GetBody is populated (so 307 and 308
 // redirects can replay the body), and Body is set to [NoBody] if the
 // ContentLength is 0.
+
+// NewRequestWithContext 返回一个带有给定 method, URL 和可选 body 的新的 [Request]。
+//
+// 如果提供的 body 同时也是一个 [io.Closer]，则返回的 [Request.Body] 设置为 body，
+// 并由 Client 的 Do、Post 和 PostForm 方法以及 [Transport.RoundTrip] 可能异步地关闭。
+//
+// NewRequestWithContext 返回一个适合与 [Client.Do] 或 [Transport.RoundTrip] 一起使用的 Request。
+// 要创建一个用于测试 Server Handler 的请求，可以使用 [net/http/httptest.NewRequest] 函数，
+// 使用 [ReadRequest]，或手动更新 Request 字段。
+// 对于外发的客户端请求，上下文控制请求及其响应的整个生命周期：获取连接、发送请求和读取响应头和主体。
+// 有关入站和出站请求字段之间的区别，请参阅 [Request] 类型的文档。
+//
+// 如果 body 的类型是 [*bytes.Buffer]、[*bytes.Reader] 或 [*strings.Reader]，
+// 则返回的请求的 ContentLength 设置为其确切值（而不是 -1），GetBody 被填充（因此 307 和 308 重定向可以重放 body），
+// 并且如果 ContentLength 是 0，则 Body 设置为 [NoBody]。
 func NewRequestWithContext(ctx context.Context, method, url string, body io.Reader) (*Request, error) {
+	// 处理 "" 方法，视为 "GET"
 	if method == "" {
 		// We document that "" means "GET" for Request.Method, and people have
 		// relied on that from NewRequest, so keep that working.
 		// We still enforce validMethod for non-empty methods.
 		method = "GET"
 	}
+
+	// 验证 method 是否有效
 	if !validMethod(method) {
 		return nil, fmt.Errorf("net/http: invalid method %q", method)
 	}
+	// 验证 ctx 是否为 nil
 	if ctx == nil {
 		return nil, errors.New("net/http: nil Context")
 	}
+	// 解析 URL
 	u, err := urlpkg.Parse(url)
 	if err != nil {
 		return nil, err
 	}
+	// 如果 body 不是 io.ReadCloser 且不为 nil，则将其包装为 io.NopCloser
 	rc, ok := body.(io.ReadCloser)
 	if !ok && body != nil {
 		rc = io.NopCloser(body)
 	}
 	// The host's colon:port should be normalized. See Issue 14836.
 	u.Host = removeEmptyPort(u.Host)
+	// 创建 Request 对象
 	req := &Request{
 		ctx:        ctx,
 		Method:     method,
@@ -920,23 +1182,24 @@ func NewRequestWithContext(ctx context.Context, method, url string, body io.Read
 		Body:       rc,
 		Host:       u.Host,
 	}
+	// 如果 body 不为 nil，根据其类型设置 ContentLength 和 GetBody
 	if body != nil {
 		switch v := body.(type) {
-		case *bytes.Buffer:
+		case *bytes.Buffer: // 处理 *bytes.Buffer 类型的 body
 			req.ContentLength = int64(v.Len())
 			buf := v.Bytes()
 			req.GetBody = func() (io.ReadCloser, error) {
 				r := bytes.NewReader(buf)
 				return io.NopCloser(r), nil
 			}
-		case *bytes.Reader:
+		case *bytes.Reader: // 处理 *bytes.Reader 类型的 body
 			req.ContentLength = int64(v.Len())
 			snapshot := *v
 			req.GetBody = func() (io.ReadCloser, error) {
 				r := snapshot
 				return io.NopCloser(&r), nil
 			}
-		case *strings.Reader:
+		case *strings.Reader: // 处理 *strings.Reader 类型的 body
 			req.ContentLength = int64(v.Len())
 			snapshot := *v
 			req.GetBody = func() (io.ReadCloser, error) {
@@ -970,6 +1233,9 @@ func NewRequestWithContext(ctx context.Context, method, url string, body io.Read
 // BasicAuth returns the username and password provided in the request's
 // Authorization header, if the request uses HTTP Basic Authentication.
 // See RFC 2617, Section 2.
+
+// BasicAuth 返回请求的 Authorization 头中提供的用户名和密码,
+// 如果请求使用 HTTP Basic Authentication 的话。请参阅 RFC 2617 第 2 节。
 func (r *Request) BasicAuth() (username, password string, ok bool) {
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
@@ -990,16 +1256,30 @@ func (r *Request) BasicAuth() (username, password string, ok bool) {
 // See go.dev/issue/67401.
 //
 //go:linkname parseBasicAuth
+
+// parseBasicAuth 解析 HTTP Basic Authentication 字符串。
+// "Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==" returns ("Aladdin", "open sesame", true).
+//
+// parseBasicAuth 应该是一个内部细节，但广泛使用的包通过 linkname 访问它。
+// 不要删除或更改类型签名。请参阅 go.dev/issue/67401。
+// 注意成员包括：
+//   - github.com/sagernet/sing
+//
+// 不要删除或更改类型签名。请参阅 go.dev/issue/67401。
+//
+// go:linkname parseBasicAuth
 func parseBasicAuth(auth string) (username, password string, ok bool) {
 	const prefix = "Basic "
 	// Case insensitive prefix match. See Issue 22736.
 	if len(auth) < len(prefix) || !ascii.EqualFold(auth[:len(prefix)], prefix) {
 		return "", "", false
 	}
+	// 截取 Basic 后面的部分进行 base64 解码
 	c, err := base64.StdEncoding.DecodeString(auth[len(prefix):])
 	if err != nil {
 		return "", "", false
 	}
+	// 将解码后的字节转换为字符串
 	cs := string(c)
 	username, password, ok = strings.Cut(cs, ":")
 	if !ok {
@@ -1019,13 +1299,26 @@ func parseBasicAuth(auth string) (username, password string, ok bool) {
 // additional requirements on pre-escaping the username and
 // password. For instance, when used with OAuth2, both arguments must
 // be URL encoded first with [url.QueryEscape].
+
+// SetBasicAuth 将请求的 Authorization 头设置为使用提供的用户名和密码
+// 进行 HTTP Basic Authentication。
+//
+// 使用 HTTP Basic Authentication 时，提供的用户名和密码未加密。
+// 通常应该仅在 HTTPS 请求中使用。
+//
+// 用户名不能包含冒号，某些协议可能对预转义用户名和密码施加额外的要求。
+// 例如，当与 OAuth2 一起使用时，两个参数都必须首先使用 [url.QueryEscape] 进行 URL 编码。
 func (r *Request) SetBasicAuth(username, password string) {
 	r.Header.Set("Authorization", "Basic "+basicAuth(username, password))
 }
 
 // parseRequestLine parses "GET /foo HTTP/1.1" into its three parts.
+
+// parseRequestLine 将 "GET /foo HTTP/1.1" 解析为三个部分。
 func parseRequestLine(line string) (method, requestURI, proto string, ok bool) {
+	// 使用 strings.Cut 来分隔 method 和其余部分
 	method, rest, ok1 := strings.Cut(line, " ")
+	// 使用 strings.Cut 来分隔 requestURI 和 proto
 	requestURI, proto, ok2 := strings.Cut(rest, " ")
 	if !ok1 || !ok2 {
 		return "", "", "", false

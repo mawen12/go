@@ -290,6 +290,10 @@ type Cmd struct {
 	// standard error. If non-nil, entry i becomes file descriptor 3+i.
 	//
 	// ExtraFiles is not supported on Windows.
+
+	// ExtraFiles 指定了要被新进程继承的其他打开的文件。
+	// 它不包含标准输入，标准输入或标准错误。
+	// 如果非空，条目 i 变成文件描述符 3+i。
 	ExtraFiles []*os.File
 
 	// SysProcAttr holds optional, operating system-specific attributes.
@@ -297,14 +301,21 @@ type Cmd struct {
 	SysProcAttr *syscall.SysProcAttr
 
 	// Process is the underlying process, once started.
+
+	// Process 是底层进程，一旦启动。
 	Process *os.Process
 
 	// ProcessState contains information about an exited process.
 	// If the process was started successfully, Wait or Run will
 	// populate its ProcessState when the command completes.
+
+	// ProcessState 包含有关已退出进程的信息。如果进程成功启动，
+	// Wait 或 Run 将在命令完成时填充其 ProcessState。
 	ProcessState *os.ProcessState
 
 	// ctx is the context passed to CommandContext, if any.
+
+	// ctx 是传递给 CommandContext 的上下文（如果有的话）。
 	ctx context.Context
 
 	Err error // LookPath error, if any.
@@ -367,6 +378,9 @@ type Cmd struct {
 	// stdin, stdout, and/or stderr files that were opened by the Cmd itself
 	// (not supplied by the caller). These should be closed as soon as they
 	// are inherited by the child process.
+
+	// childIOFiles 保存了由 Cmd 本身（而不是调用者提供）打开的子进程的 stdin、stdout 和/或 stderr
+	// 文件的 closer。这些文件应该被子进程继承后尽快关闭。
 	childIOFiles []io.Closer
 
 	// parentIOPipes holds closers for the parent's end of any pipes
@@ -374,6 +388,9 @@ type Cmd struct {
 	// that were opened by the Cmd itself (not supplied by the caller).
 	// These should be closed after Wait sees the command and copying
 	// goroutines exit, or after WaitDelay has expired.
+
+	// parentIOPipies 保存了由 Cmd 本身（而不是调用者提供）打开的连接到子进程的 stdin、stdout 和/或 stderr
+	// 流的管道的父端的 closer。这些应该在 Wait 看到命令和复制 goroutine 退出后，或者在 WaitDelay 过期后关闭。
 	parentIOPipes []io.Closer
 
 	// goroutine holds a set of closures to execute to copy data
@@ -559,8 +576,8 @@ func Command(name string, arg ...string) *Cmd {
 //
 // 如果 context 先于命令完成，则所提供的上下文可被用来打断进程
 // （通过调用 cmd.Cancel/[os.Process.Kill])。
-// 
-// CommandContext 设置 [Command.Cancel] 函数来调用进程上的 
+//
+// CommandContext 设置 [Command.Cancel] 函数来调用进程上的
 // Kill 方法，然后将 WaitDelay 置为未设置。调用者可以在命令启动
 // 后通过编辑 Cancel 字段来自定义取消行为。
 func CommandContext(ctx context.Context, name string, arg ...string) *Cmd {
@@ -666,7 +683,7 @@ func (c *Cmd) childStderr(childStdout *os.File) (*os.File, error) {
 
 // writerDescriptor 返回一个 os.File，子进程可以向其中写入数据以将数据发送到 w。
 //
-// 如果 w 为空，writerDescriptor 返回一个写入 os.DevNull 的 File。 
+// 如果 w 为空，writerDescriptor 返回一个写入 os.DevNull 的 File。
 func (c *Cmd) writerDescriptor(w io.Writer) (*os.File, error) {
 	if w == nil {
 		f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
@@ -742,7 +759,7 @@ func (c *Cmd) Run() error {
 // order to release associated system resources.
 
 // Start 启动指定的命令，但不等待其完成。
-// 
+//
 // 如果 Start 成功返回，c.Process 字段将被设置。
 //
 // 在成功调用 Start 之后，必须调用 [Cmd.Wait] 方法以释放相关资源。
@@ -1221,7 +1238,7 @@ func (c *Cmd) StdinPipe() (io.WriteCloser, error) {
 // See the example for idiomatic usage.
 
 // StdoutPipe 返回一个管道，该管道将被链接到命令启动是的 stdout。
-// 
+//
 // [Cmd.Wait] 将会在看到命令退出后关闭管道，因此大多数调用者不需要自己关闭管道。
 // 因此，在从管道完成所有读取之前调用 Wait 是不正确的。
 // 出于同样的原因，在使用 StdoutPipe 时调用 [Cmd.Run] 也是不正确的。
