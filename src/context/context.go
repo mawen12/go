@@ -54,6 +54,44 @@
 //
 // See https://go.dev/blog/context for example code for a server that uses
 // Contexts.
+
+// context 包定义了 Context 类型，该类型携带截止日期、取消信号和其他请求范围内的值，
+// 以跨 API 边界和进程传递。
+//
+// 服务器的传入请求应该创建一个 [Context]，并且对服务器的传出调用应该接受一个 Context。
+// 它们之间的函数调用链必须传播 Context，或者使用 [WithCancel]、[WithDeadline]，[WithTimeout]
+// 或 [WithValue] 创建一个派生的 Context 来替换它。
+//
+// 一个 Context 可以被取消，以指示应该停止在其上执行的工作。带有截止日期的 Context
+// 在截止日期过后被取消。 当一个 Context 被取消时，从它派生的所有 Context 也被取消。
+//
+// [WithCancel]、[WithDeadline] 和 [WithTimeout] 函数接受一个 Context （父级）并返回一个
+// 派生的 Context (子级) 和一个 [CancelFunc]。直接调用 CancelFunc 会取消子级和它的子级。
+// 它还会从父级中删除对该子级的引用，并停止任何相关的计时器。未能调用 CancelFunc 会泄漏子级
+// 和它的子级，直到父级被取消。go vet 工具检查所有控制流路径上是否使用了 CancelFunc。
+//
+// [WithCancelCause]、[WithDeadlineCause] 和 [WithTimeoutCause] 函数返回一个 [CancelCauseFunc]。
+// 它接受一个错误并将其记录为取消原因。对已取消的 Context 或任何子级调用 [Cause] 可以检索该原因。
+// 如果没有指定原因，Cause(ctx) 返回与 ctx.Err() 相同的值。
+//
+// 使用 Context 的程序应遵循以下规则，以确保跨包接口的一致性，并启用静态分析工具检查上下文传播：
+//
+// 不要在结构体类型中存储 Context；相反，应该显式地将 Context 传递给每个需要它的函数。
+// 这在 https://go.dev/blog/context-and-structs 中有更详细的讨论。Context 应该是第一个参数，
+// 通常命名为 ctx：
+//
+//	func DoSomething(ctx context.Context, arg Arg) error {
+//		// ... use ctx ...
+//	}
+//
+// 不要传递 nil [Context]，即使函数允许它。传递 [context.TODO] 如果你不确定使用哪个 Context。
+//
+// 仅将 context Values 用于跨进程和 API 传递的请求范围内的数据，而不是用于向函数传递可选参数。
+//
+// 同一个 Context 可以传递给不同 goroutine 中运行的函数；Context 对多个 goroutine 同时使用是
+// 安全的。
+//
+// 参见 https://go.dev/blog/context 获取使用 Context 的服务器的示例代码。
 package context
 
 import (
@@ -68,10 +106,18 @@ import (
 // API boundaries.
 //
 // Context's methods may be called by multiple goroutines simultaneously.
+
+// Context 携带一个截止日期、一个取消信号和其他跨 API 边界的值。
+//
+// Context 的方法可以被多个 goroutine 同时使用。
 type Context interface {
 	// Deadline returns the time when work done on behalf of this context
 	// should be canceled. Deadline returns ok==false when no deadline is
 	// set. Successive calls to Deadline return the same results.
+
+	// Deadline 返回代表此上下文的工作应该被取消的时间。
+	// 当没有设置截止日期时，Deadline 返回 ok==false。
+	// 连续调用 Deadline 返回相同的结果。
 	Deadline() (deadline time.Time, ok bool)
 
 	// Done returns a channel that's closed when work done on behalf of this
@@ -105,6 +151,33 @@ type Context interface {
 	//
 	// See https://blog.golang.org/pipelines for more examples of how to use
 	// a Done channel for cancellation.
+
+	// Done 返回一个 channel，当代表此 Context 的工作应该被取消时，该 channel 会被关闭。
+	// 如果此 Context 永远不会被取消，Done 返回 nil。连续调用 Done 返回相同的值。
+	// Done channel 的关闭可能是异步发生的，在取消函数返回之后。
+	//
+	// WithCancel 安排在调用 cancel 时关闭 Done。
+	// WithDeadline 安排在截止日期过期时关闭 Done。
+	// WithTimeout 安排在超时结束时关闭 Done。
+	//
+	// Done 是为在 select 语句中使用而提供的：
+	//
+	// // Stream 生成值将它们发送到 out，直到 DoSomething 返回错误或 ctx.Done 被关闭。
+	// func Stream(ctx context.Context, out chan<- Value) error {
+	// 		for {
+	// 			v, err := DoSomething(ctx)
+	// 			if err != nil {
+	// 				return err
+	// 			}
+	// 			select {
+	// 			case <-ctx.Done():
+	// 				return ctx.Err()
+	// 			case out <- v:
+	// 			}
+	// 		}
+	// }
+	//
+	// 参见 https://blog.golang.org/pipelines 获取更多关于如何使用 Done channel 进行取消的示例。
 	Done() <-chan struct{}
 
 	// If Done is not yet closed, Err returns nil.
@@ -112,6 +185,12 @@ type Context interface {
 	// DeadlineExceeded if the context's deadline passed,
 	// or Canceled if the context was canceled for some other reason.
 	// After Err returns a non-nil error, successive calls to Err return the same error.
+
+	// 如果 Done 尚未关闭，Err 返回 nil。
+	// 如果 Done 已关闭，Err 返回一个非 nil 的错误来解释原因：
+	// DeadlineExceeded 如果上下文的截止日期已过，
+	// 或 Canceled 如果上下文因其他原因被取消。
+	// 在 Err 返回一个非 nil 的错误之后，连续调用 Err 返回相同的错误。
 	Err() error
 
 	// Value returns the value associated with this context for key, or nil
@@ -159,6 +238,45 @@ type Context interface {
 	// 		u, ok := ctx.Value(userKey).(*User)
 	// 		return u, ok
 	// 	}
+
+	// Value 返回与此 Context 相关联的 key 的值，如果没有与 key 相关联的值，
+	// 则返回 nil。使用相同的 key 连续调用 Value 返回相同的结果。
+	//
+	// 仅将 context Values 用于跨进程和 API 传递的请求范围内的数据，
+	// 而不是用于向函数传递可选参数。
+	//
+	// 一个 key 标识 Context 中的一个特定值。希望在 Context 中存储值的函数
+	// 通常在全局变量中分配一个 key，然后使用该 key 作为参数传递给 context.WithValue
+	// 和 Context.Value。一个 key 可以是任何支持相等的类型；包应该将 key 定义为未导出
+	// 的类型以避免冲突。
+	//
+	// 定义 Context key 的包应该为使用该 key 存储的值提供类型安全的访问器：
+	//
+	// // 定义一个 User 类型，它存储在 Context 中。
+	// package user
+	//
+	// import "context"
+	//
+	// // User 是存储在 Context 中的值的类型。
+	// type User struct {...}
+	//
+	// // key 是此包中定义的 key 的未导出类型，这可以防止与其他包中定义的 key 冲突。
+	// type key int
+	//
+	// // userKey 是 Context 中 user.User 值的 key。它是未导出的；客户端使用 user.NewContext
+	// // 和 user.FromContext 而不是直接使用这个 key。
+	// var userKey key
+	//
+	// // NewContext 返回一个新的 Context，它携带值 u。
+	// func NewContext(ctx context.Context, u *User) context.Context {
+	// 	return context.WithValue(ctx, userKey, u)
+	// }
+	//
+	// // FromContext 返回存储在 ctx 中的 User 值（如果有的话）。
+	// func FromContext(ctx context.Context) (*User, bool) {
+	// 	u, ok := ctx.Value(userKey).(*User)
+	// 	return u, ok
+	// }
 	Value(key any) any
 }
 

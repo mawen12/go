@@ -10,6 +10,14 @@
 // Because these interfaces and primitives wrap lower-level operations with
 // various implementations, unless otherwise informed clients should not
 // assume they are safe for parallel execution.
+
+// io 包提供了基本的 I/O 原语接口。
+// 它主要工作是包装现有的此类原语的实现，
+// 例如 os 包中的实现，到共享的公共接口中，
+// 这些接口抽象了功能，以及一些其他相关的原语。
+//
+// 因为这些接口和原语包装了具有各种实现的底层操作，
+// 除非另有说明，客户端不应假定它们是并行安全的。
 package io
 
 import (
@@ -19,9 +27,12 @@ import (
 
 // Seek whence values.
 const (
-	SeekStart   = 0 // seek relative to the origin of the file
+	// 相对于文件的起始位置
+	SeekStart = 0 // seek relative to the origin of the file
+	// 相对于文件的当前偏移位置
 	SeekCurrent = 1 // seek relative to the current offset
-	SeekEnd     = 2 // seek relative to the end
+	// 相对于文件的末尾位置
+	SeekEnd = 2 // seek relative to the end
 )
 
 // ErrShortWrite means that a write accepted fewer bytes than requested

@@ -12,6 +12,14 @@
 // printed does not end in a newline, the logger will add one.
 // The Fatal functions call [os.Exit](1) after writing the log message.
 // The Panic functions call panic after writing the log message.
+
+// log 包实现了一个简单的日志包。它定义了一个 [Logger] 类型，具有格式化输出的方法。
+// 它同时还有一个预定义的 'standard' Logger，可以通过辅助函数 Print[f|ln]、Fatal[f|ln]
+// 和 Panic[f|ln] 访问，这些函数比手动创建 Logger 更容易使用。
+// 该 Logger 写入 stderr 并打印每条日志消息的日期和时间。
+// 每条日志消息都输出在单独的一行上：如果正在打印的消息没有以换行符结尾，Logger 将添加一个。
+// Fatal 函数在写入日志消息后调用 [os.Exit](1)。
+// Panic 函数在写入日志消息后调用 panic。
 package log
 
 import (
@@ -39,27 +47,55 @@ import (
 // while flags Ldate | Ltime | Lmicroseconds | Llongfile produce,
 //
 //	2009/01/23 01:23:23.123123 /a/b/c/d.go:23: message
+
+// 这些标志定义了要添加到 [Logger] 生成的每个日志条目的前缀文本。
+// 位被或运算组合在一起以控制要打印的内容。
+// 除了 Lmsprefix 标志之外，没有控制它们出现的顺序（这里列出的顺序）
+// 或他们呈现的格式（如注释中所述）。
+// 前缀仅在指定了 Llongfile 或 Lshortfile 时才跟随冒号。
+// 例如，flags Ldate | Ltime (或 LstdFlags) 产生
+//
+// 2009/01/23 01:23:23 message
+//
+// 当 flags Ldate | Ltime | Lmicroseconds | Llongfile 产生
+//
+// 2009/01/23 01:23:23.123123 /a/b/c/d.go:23: message
 const (
-	Ldate         = 1 << iota     // the date in the local time zone: 2009/01/23
-	Ltime                         // the time in the local time zone: 01:23:23
-	Lmicroseconds                 // microsecond resolution: 01:23:23.123123.  assumes Ltime.
-	Llongfile                     // full file name and line number: /a/b/c/d.go:23
-	Lshortfile                    // final file name element and line number: d.go:23. overrides Llongfile
-	LUTC                          // if Ldate or Ltime is set, use UTC rather than the local time zone
-	Lmsgprefix                    // move the "prefix" from the beginning of the line to before the message
-	LstdFlags     = Ldate | Ltime // initial values for the standard logger
+	// 本地时区的日期：2009/01/23
+	Ldate = 1 << iota // the date in the local time zone: 2009/01/23
+	// 本地时区的时间：01:23:23
+	Ltime // the time in the local time zone: 01:23:23
+	// 微秒级：01:23:23.123123。假设 Ltime。
+	Lmicroseconds // microsecond resolution: 01:23:23.123123.  assumes Ltime.
+	// 完整文件名和行号：/a/b/c/d.go:23
+	Llongfile // full file name and line number: /a/b/c/d.go:23
+	// 最终文件名元素和行号：d.go:23。覆盖 Llongfile
+	Lshortfile // final file name element and line number: d.go:23. overrides Llongfile
+	// 如果设置了 Ldate 或 Ltime，则使用 UTC 而不是本地时区
+	LUTC // if Ldate or Ltime is set, use UTC rather than the local time zone
+	// 将 "prefix" 从行首移动到消息前面
+	Lmsgprefix // move the "prefix" from the beginning of the line to before the message
+	// Ldate | Ltime 的初始值
+	LstdFlags = Ldate | Ltime // initial values for the standard logger
 )
 
 // A Logger represents an active logging object that generates lines of
 // output to an [io.Writer]. Each logging operation makes a single call to
 // the Writer's Write method. A Logger can be used simultaneously from
 // multiple goroutines; it guarantees to serialize access to the Writer.
+
+// Logger 代表一个活跃的日志对象，生成输出到 [io.Writer] 的行。
+// 每一个日志操作都会对 Writer 的 Write 方法进行一次调用。
+// Logger 可以同时被多个 goroutine 使用；它保证对 Writer 的访问是顺序的。
 type Logger struct {
 	outMu sync.Mutex
-	out   io.Writer // destination for output
+	// out 输出目的地
+	out io.Writer // destination for output
 
-	prefix    atomic.Pointer[string] // prefix on each line to identify the logger (but see Lmsgprefix)
-	flag      atomic.Int32           // properties
+	// prefix 每行的前缀以识别 logger（但请参阅 Lmsgprefix）
+	prefix atomic.Pointer[string] // prefix on each line to identify the logger (but see Lmsgprefix)
+	// flag 定义了日志属性
+	flag      atomic.Int32 // properties
 	isDiscard atomic.Bool
 }
 
@@ -68,6 +104,11 @@ type Logger struct {
 // The prefix appears at the beginning of each generated log line, or
 // after the log header if the [Lmsgprefix] flag is provided.
 // The flag argument defines the logging properties.
+
+// 创建一个新的 [Logger]。
+// out 变量设置了日志数据将要被写入的目的地。
+// prefix 出现在每个生成的日志行的开头，或者如果提供了 [Lmsgprefix] 标志，则出现在日志后之后。
+// flag 参数定义了日志属性。
 func New(out io.Writer, prefix string, flag int) *Logger {
 	l := new(Logger)
 	l.SetOutput(out)
@@ -77,6 +118,8 @@ func New(out io.Writer, prefix string, flag int) *Logger {
 }
 
 // SetOutput sets the output destination for the logger.
+
+// SetOutput 设置 logger 输出的目的地
 func (l *Logger) SetOutput(w io.Writer) {
 	l.outMu.Lock()
 	defer l.outMu.Unlock()
@@ -84,9 +127,12 @@ func (l *Logger) SetOutput(w io.Writer) {
 	l.isDiscard.Store(w == io.Discard)
 }
 
+// std 仅带有 Ldate | Ltime 标志的的 Logger，输出到 stderr。
 var std = New(os.Stderr, "", LstdFlags)
 
 // Default returns the standard logger used by the package-level output functions.
+
+// Default 返回标准的 logger，供包级输出函数使用。
 func Default() *Logger { return std }
 
 // Cheap integer to fixed-width decimal ASCII. Give a negative width to avoid zero-padding.
@@ -255,6 +301,9 @@ func init() {
 
 // Print calls l.Output to print to the logger.
 // Arguments are handled in the manner of [fmt.Print].
+
+// Print 调用 l.Output 来打印到 logger。
+// 参数以 [fmt.Print] 的方式处理。
 func (l *Logger) Print(v ...any) {
 	l.output(0, 2, func(b []byte) []byte {
 		return fmt.Append(b, v...)
