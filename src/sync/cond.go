@@ -34,6 +34,26 @@ import (
 // [the Go memory model]: https://go.dev/ref/mem
 // [Roberto Clapis's series on advanced concurrency patterns]: https://blogtitle.github.io/categories/concurrency/
 // [Bryan Mills's talk on concurrency patterns]: https://drive.google.com/file/d/1nPdvhB0PutEJzdCq5ms6UI58dp50fcAN/view
+
+/*
+Cond 实现了一个条件变量，是等待或宣布事件发生的集合点。
+
+每个 Cond 都有一个向关联的 Locker L (通常是 [*Mutex] 或 [*RWMutex])，
+在改变条件和调用 [Cond.Wait] 方法时必须持有。
+
+Cond 在第一次使用后不能被复制。
+
+在 [Go 内存模型] 的术语中，Cond 安排了一个调用 [Cond.Broadcast] 或 [Cond.Signal]
+“同步前”任何它解除阻塞的 Wait 调用。
+
+在许多简单的用例中，用户会更喜欢使用 channels 而不是 Cond（Broadcast 对应于关闭通道，Signal 对应于在 channel 上发送）。
+
+对于 [sync.Cond] 的替代方案的更多信息，请参阅 [Roberto Clapis 的高级并发模式系列]，以及 [Bryan Mills 的并发模式讲座]。
+
+[Go 内存模型]: https://go.dev/ref/mem
+[Roberto Clapis 的高级并发模式系列]: https://blogtitle.github.io/categories/concurrency/
+[Bryan Mills 的并发模式讲座]: https://drive.google.com/file/d/1nPdvhB0PutEJzdCq5ms6UI58dp50fcAN/view
+*/
 type Cond struct {
 	noCopy noCopy
 
