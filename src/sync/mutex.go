@@ -34,6 +34,8 @@ type Mutex struct {
 }
 
 // A Locker represents an object that can be locked and unlocked.
+
+// Locker 代表可被 locked/unlocked 的对象。
 type Locker interface {
 	Lock()
 	Unlock()
